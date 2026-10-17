@@ -2,52 +2,17 @@ name: Build OpenHome Party Windows
 
 on:
   push:
-    branches: [party-support]
+    branches:
+      - party-support
   workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
-    permissions:
-      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Patch LGPE party display
-        shell: pwsh
-        run: |
-          $path = 'src/core/save/LGPESAV.ts'
-          $text = Get-Content $path -Raw
-          $needle = @'
-  getDisplayData() {
-'@
-          $insert = @'
-  getDisplayPkms() {
-    return this.pokeListHeader.partyIndices
-      .slice(0, 6)
-      .map((monIndex, partySlot) => {
-        if (monIndex < 0 || monIndex >= BOX_SLOTS_TOTAL) {
-          return {
-            mon: undefined,
-            description: `Party ${partySlot + 1}`,
-          }
-        }
-
-        const mon = this.getMonAtIndex(monIndex)
-        return {
-          mon: mon ?? undefined,
-          description: `Party ${partySlot + 1}`,
-        }
-      })
-  }
-
-  getDisplayData() {
-'@
-          if (-not $text.Contains($needle)) { throw 'Could not find LGPE getDisplayData insertion point' }
-          $text = $text.Replace($needle, $insert)
-          Set-Content -Path $path -Value $text -NoNewline
 
       - name: Install PNPM
         uses: pnpm/action-setup@v4
@@ -61,16 +26,13 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target, ./openhome_core -> target, ./pkm_rs -> target, ./pkm_rs_derive -> target, ./pkm_rs_resources -> target, ./pkm_rs_types -> target, . -> target'
-          key: party-windows
-
       - name: Install wasm-pack
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
+
+      - name: Patch LGPE party display
+        run: node scripts/patch-lgpe-party.cjs
 
       - name: Install dependencies
         run: pnpm i --frozen-lockfile
